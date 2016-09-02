@@ -1,18 +1,24 @@
 TTM {
+	var <path;
+	var <folder;
+	var <soundsFolder = "fssounds";
 	var <tweets;
 	var <dictesen;
 	var <sounds;
 	var punct;
 	var task;
 
-	*new { arg path;
-		^super.new.init(path);
+	*new { arg path, folder = "TTM";
+		^super.new.init(path, folder);
 	}
 
-	init { arg p;
-		tweets = Tweets.new(p);
-		dictesen = Dictesen.new(p);
-		sounds = Sounds.new(p);
+	init { arg p, f;
+		this.initPath(p, f);
+		if(path.isNil, { ^nil });
+
+		tweets = Tweets.new(path);
+		dictesen = Dictesen.new(path);
+		sounds = Sounds.new(path, soundsFolder: soundsFolder);
 
 		punct = [ // very basic, because unicode lack
 			".", ",", ";", ":", "'", "`", "\"",
@@ -22,6 +28,34 @@ TTM {
 		];
 
 		this.prInitTask;
+	}
+
+	initPath { arg p, f;
+		var newPath;
+		path = (p ? Platform.userHomeDir).standardizePath;
+
+		if(File.exists(path), {
+			if(PathName(path).isFile.not, {
+				newPath = path +/+ f;
+				if(File.exists(newPath).not, {
+					File.mkdir(newPath +/+ soundsFolder);
+					"INFO (%): Creating DB at %".format(this, newPath).inform;
+					path = newPath;
+				}, {
+					if(File.exists(newPath +/+ soundsFolder).not, {
+						File.mkdir(newPath +/+ soundsFolder)
+					});
+					"INFO (%): Using existing DB at %".format(this, newPath).inform;
+					path = newPath;
+				})
+			}, {
+				"Path % is an existing file".format(path).error;
+				path = nil;
+			});
+		}, {
+			"Path % does not exist".format(path).error;
+			path = nil;
+		});
 	}
 
 	start {
@@ -74,7 +108,7 @@ TTM {
 				lastEsWords.postln;
 				lastEnWords.postln;
 				lastSounds.postln;
-				15.wait;
+				60.wait; // hay que sacar el wait y hacer routines concurrentes.
 			});
 		});
 	}
@@ -88,7 +122,7 @@ TTMDB {
 	init { arg p, f;
 		var dataFile;
 
-		path = (p ? "~/Desktop/").standardizePath;
+		path = (p ? Platform.userHomeDir).standardizePath;
 		fileName = f ? "file.db";
 		dataFile = File(path +/+ fileName, "r");
 		if(dataFile.isOpen, {
@@ -114,9 +148,15 @@ TTMDB {
 
 Sounds : TTMDB {
 	var <token;
+	var <soundsFolder;
 
-	*new { arg path, file = "sounds.db";
-		^super.new.init(path, file)
+	*new { arg path, file = "sounds.db", soundsFolder = "fssounds";
+		^super.new.init(path, file, soundsFolder);
+	}
+
+	init { arg p, f, s;
+		super.init(p, f);
+		soundsFolder = s;
 	}
 
 	setToken { arg t;
@@ -125,7 +165,7 @@ Sounds : TTMDB {
 		Freesound.token = token;
 	}
 
-	search { arg word, nfiles = 2;
+	search { arg word, nfiles = 1;
 		var fspager, indx, retrieved;
 
 		fspager = FSSound.textSearchSync(
@@ -133,6 +173,7 @@ Sounds : TTMDB {
 			params: (page: 2)
 		);
 		if(fspager.dict.includesKey("count").not, { ^nil }); //{"detail":"Not found"}
+		if(fspager.results.size < 1, { ^nil }); // count devuelve un string
 		if(fspager.count < nfiles, { nfiles = fspager.count });
 
 		indx = (0..(fspager.results.size-1)).scramble[0..(nfiles-1)];
@@ -142,7 +183,7 @@ Sounds : TTMDB {
 
 			if(data.flat.includes(fssound.id.asSymbol).not, {
 				errorCode = fssound.retrievePreviewSync(
-					path +/+ "fssounds/",
+					path +/+ soundsFolder,
 					quality: "hq",
 					format: "ogg"
 				);
@@ -185,8 +226,8 @@ Tweets : TTMDB {
 		var existingIDs, append;
 
 		systemCmd(query + ">" + "/tmp/tmp.csv");
-		// check nil/empty?
-		csvfile = CSVFileReader.read("/tmp/tmp.csv"); // not working right
+		csvfile = CSVFileReader.read("/tmp/tmp.csv"); // *
+		if(csvfile.isNil, { "%: No results found".format(this).inform; ^this });
 		csvfile = csvfile.drop(1);
 		csvfile = csvfile.collect({ arg i; i[0] = i[0].asSymbol; i });
 		existingIDs = data.flop.at(0);
@@ -284,7 +325,46 @@ Dictesen : TTMDB {
 		var key = "%-%-%".format("preview",quality,format);
 		^FSReq.retrieveSync(
 			this.previews.dict[key],
-			path ++ this.previewFilename(format)
+			path +/+ this.previewFilename(format) // FIXED
 		); // return Error code
+	}
+}
+
++ CSVFileReader {
+	next {
+		var c, record, string = String.new;
+		var inQuotes = false; // *
+
+		while {
+			c = stream.getChar;
+			c.notNil
+		} {
+			if (inQuotes.not and: { c == delimiter }) { // *
+				if (skipBlanks.not or: { string.size > 0 }) {
+					record = record.add(string);
+					string = String.new;
+				}
+			} {
+				if (inQuotes.not and: { c == $\n or: { c == $\r } }) { // *
+					record = record.add(string);
+					string = String.new;
+					if (skipEmptyLines.not or: { (record != [ "" ]) }) {
+						^record
+					};
+					record = nil;
+				} {
+					if(inQuotes.not and: { c == $\" }) {
+						inQuotes = true;
+					} {
+						if(c == $\") {
+							inQuotes = false;
+						}
+					}; // *
+					string = string.add(c);
+				}
+			}
+		};
+		if (string.notEmpty) { ^record.add(string) };
+		^record;
 	}
 }
