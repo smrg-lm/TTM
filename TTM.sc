@@ -5,7 +5,6 @@ TTM {
 	var <dictesen;
 	var <sounds;
 	var punct;
-	var searchFunc;
 
 	*new { arg path, folder = "TTM";
 		^super.new.init(path, folder);
@@ -26,8 +25,6 @@ TTM {
 			"*", "#", "@", "$", "-", "+",
 			"\n", "\t", "\f"
 		];
-
-		this.prInitSearchFunc;
 	}
 
 	initPath { arg p, f;
@@ -59,12 +56,39 @@ TTM {
 	}
 
 	search { arg param = 2;
-		searchFunc.value(param);
+		var lastTweets, lastWords, lastSounds;
+
+		tweets.search({ arg tweetsList; // tweets/nil
+			lastTweets = tweetsList;
+
+			if(lastTweets.notNil, {
+				lastTweets.do({ arg i;
+					lastWords = lastWords ++ this.getWords(i.last);
+				});
+				lastWords.do({ arg palabra;
+					dictesen.addWord(palabra, action: { arg word; //word(en/es)/nil
+						if(word.notNil, {
+							sounds.search(word, 15.rand, action: { arg soundList; // last sounds/nil
+								var sound;
+								if(soundList.notNil, {
+									lastSounds = lastSounds ++ soundList;
+									sound = soundList.at(0); // test
+									this.playWord(word, sound); // test
+								});
+							});
+						});
+					});
+				});
+			}, {
+				"No se encontraron nuevos tweets".warn;
+			});
+
+		});
 	}
 
 	playWord { arg word, sound; // test
 		fork {
-			"\nINFO: Playing sound: % %\n".format(word, sound).warn;
+			"Playing word: % sound: %\n".format(word.toUpper, sound).warn;
 			Buffer.read(
 				Server.default,
 				(this.path +/+ this.soundsFolder +/+ sound.at(2)).postln,
@@ -81,67 +105,6 @@ TTM {
 		words = string.split($ );
 		words.removeAllSuchThat({ arg i; i.isEmpty; });
 		^words;
-	}
-
-	prInitSearchFunc {
-		searchFunc = { arg param; Routine.run({
-			var lastTweets, lastEsWords, lastEnWords, lastSounds;
-
-			lastTweets = lastEsWords = lastEnWords = lastSounds = nil;
-			lastTweets = tweets.search; // returns the last ones/nil
-
-			lastTweets.do({ arg i;
-				lastEsWords = lastEsWords ++ this.getWords(i.last);
-				//lastEsWords.postln;
-			});
-
-			lastEsWords.do({ arg i;
-				var word, sound, startTime;
-
-				startTime = Process.elapsedTime;
-				// las llamadas sincrónicas bloquean sclang
-				// esta tarda extremadamente demasiado...
-				word = dictesen.addWord(i); // returns englishw/nil
-
-				if(word.notNil, {
-					lastEnWords = lastEnWords.add(word);
-
-					sounds.search(word) !? { arg list; // last sounds/nil
-						lastSounds = lastSounds ++ list;
-						sound = list.at(0); // test
-					};
-
-					if(sound.notNil, { // test
-						this.playWord(word, sound); // test
-						param = param - 1; // test
-						if(param < 1, { nil.yield }); // test
-						(Process.elapsedTime - startTime + 1).postln.wait;
-					}, {
-						"No sound found".warn;
-						(Process.elapsedTime - startTime + 1).postln.wait;
-					});
-				}, {
-					lastEsWords = lastEsWords.remove(i);
-				});
-			});
-
-			"*** FIN ***".warn;
-
-			/*
-			lastEnWords.do({ arg i;
-				sounds.search(i) !? { arg list; // last sounds/nil
-					lastSounds = lastSounds ++ list;
-				};
-			});
-
-			// send data, trigger something ...
-			$-.dup(20).join.postln;
-			lastTweets.postln;
-			lastEsWords.postln;
-			lastEnWords.postln;
-			lastSounds.postln;
-			*/
-		}, clock: TempoClock.new) };
 	}
 }
 
@@ -168,7 +131,7 @@ TTMDB {
 		data = data ? [];
 	}
 
-	write { // fix: siempre vuelve a escribir todo
+	write { // fix: siempre vuelve a escribir todo, MUTEX?
 		var dataFile;
 
 		dataFile = File(path +/+ fileName, "w");
@@ -196,41 +159,47 @@ Sounds : TTMDB {
 		Freesound.token = token;
 	}
 
-	search { arg word, nfiles = 1;
+	search { arg word, index = 0, action;
 		var fspager, indx, retrieved;
 
-		fspager = FSSound.textSearchSync(
+		FSSound.textSearch(
 			query: word, filter: "type:wav duration:[20 TO 120]", sort: "duration_asc",
-			params: (page: 2)
-		);
-		if(fspager.dict.includesKey("count").not, { ^nil }); //{"detail":"Not found"}
-		if(fspager.results.size < 1, { ^nil }); // count devuelve un string
-		if(fspager.count < nfiles, { nfiles = fspager.count });
+			params: (page: 2), action: { arg fspager;
+				if(fspager.dict.includesKey("results").not or:
+					{ fspager.results.size <= index } or:
+					{ fspager.results.size < 1 }, {
+						"%: no se encontraron resultados".format(this).warn;
+						action.value(nil);
+					}, {
+						var fssound = fspager.at(index);
+						var filePath = path +/+ soundsFolder +/+ fssound.previewFilename;
 
-		indx = (0..(fspager.results.size-1)).scramble[0..(nfiles-1)];
-		indx.do({ arg i;
-			var fssound = fspager.at(i);
-			var errorCode;
-
-			if(data.flat.includes(fssound.id.asSymbol).not, {
-				errorCode = fssound.retrievePreviewSync(
-					path +/+ soundsFolder,
-					quality: "hq",
-					format: "ogg"
-				);
-				if(errorCode == 0, {
-					retrieved = retrieved.add([
-						word.asSymbol,
-						fssound.id.asSymbol,
-						fssound.previewFilename,
-						Date.getDate.asSortableString
-					]);
-					data = data.add(retrieved.last);
+						if(data.flat.includes(fssound.id.asSymbol).not, {
+							fssound.retrievePreview(
+								path +/+ soundsFolder,
+								action: {
+									if(File.exists(filePath), {
+										retrieved = retrieved.add([
+											word.asSymbol,
+											fssound.id.asSymbol,
+											fssound.previewFilename,
+											Date.getDate.asSortableString
+										]);
+										data = data.add(retrieved.last);
+										this.write; // MUTEX
+										action.value(retrieved);
+									}, {
+										"%: error en la descarga".format(this).warn;
+									});
+								},
+								quality: "hq",
+								format: "ogg"
+							);
+						}, {
+							"%: el archivo ya fue descargado".format(this).warn;
+						});
 				});
-			});
 		});
-		this.write;
-		^retrieved;
 	}
 }
 
@@ -253,21 +222,32 @@ Tweets : TTMDB {
 		query = "t search all \"%\" -n % --csv".format(query, n);
 	}
 
-	search {
-		var existingIDs, append;
+	search { arg action;
+		var tmpFile = PathName.tmp +/+ "tweets%".format(UniqueID.next);
 
-		systemCmd(query + ">" + "/tmp/tmp.csv");
-		csvfile = CSVFileReader.read("/tmp/tmp.csv"); // *
-		if(csvfile.isNil, { "%: No results found".format(this).inform; ^nil });
-		csvfile = csvfile.drop(1);
-		csvfile = csvfile.collect({ arg i; i[0] = i[0].asSymbol; i });
-		existingIDs = data.flop.at(0);
-		append = csvfile.reject({ arg i;
-			existingIDs.includes(i.at(0))
+		(query + ">" + tmpFile).unixCmd({ arg res, pid;
+			var existingIDs, append;
+
+			csvfile = CSVFileReader.read(tmpFile);
+			if(csvfile.isNil, {
+				"%: No new tweets".format(this).inform;
+				action.value(nil);
+			}, {
+				csvfile = csvfile.drop(1);
+				csvfile = csvfile.collect({ arg i; i[0] = i[0].asSymbol; i });
+				existingIDs = data.flop.at(0);
+				append = csvfile.reject({ arg i;
+					existingIDs.includes(i.at(0))
+				});
+				data = data ++ append;
+				this.write;
+				if(append.isEmpty, {
+					action.value(nil)
+				}, {
+					action.value(append)
+				});
+			});
 		});
-		data = data ++ append;
-		this.write;
-		if(append.isEmpty, { ^nil }, { ^append });
 	}
 }
 
@@ -280,84 +260,91 @@ Dictesen : TTMDB {
 		data = data ? Dictionary.new;
 	}
 
-	addWord { arg palabra;
-		var word;
+	addWord { arg palabra, direction = "es-en",
+		rules = ["<n>", "<vblex>", "<adj>"], action;
 
 		if(data.includesKey(palabra).not, {
-			word = this.translate(palabra, "es-en");
-			if(word.first == $*) { // está en inglés?
-				word = word.replace($*, "");
-				palabra = this.translate(word, "en-es"); // si no, esto da *
-			};
-			if((palabra.first != $*) and: { this.isValidWord(word) }) {
-				this.data.put(palabra, word);
-				this.write;
-				^word;
-			};
+			this.translate(palabra, direction, { arg word;
+				if(word.notNil, {
+					this.checkValidWord(
+						word, direction.split($-).reverse.join($-),
+						rules, { arg valid;
+							if(valid, {
+								this.data.put(palabra, word);
+								this.write; // MUTEX
+								action.value(word);
+							}, {
+								action.value(nil);
+							});
+					});
+				}, {
+					action.value(nil);
+				});
+			});
+		}, {
+			action.value(palabra); // ver qué hacer.
 		});
-		^nil;
 	}
 
-	translate { arg palabra, direction = "es-en";
-		^"echo \"%\" | apertium %".format(palabra, direction)
-		.unixCmdGetStdOut.replace($ , "")
-		.replace($\n, "")
-		.toLower;
+	translate { arg palabra, direction = "es-en", action;
+		var tmpFile = PathName.tmp +/+ "dictesen%".format(UniqueID.next);
+
+		"echo \"%\" | apertium % > %".format(palabra, direction, tmpFile)
+		.unixCmd({ arg res, pid;
+			var file, cmdOut;
+			file = File.open(tmpFile, "r");
+			cmdOut = file.readAllString;
+			file.close;
+			if(cmdOut.first != $*, {
+				action.value(
+					cmdOut
+					//.replace($ , "") // puede devolver una frase verbal
+					.replace($\n, "")
+					.toLower
+				);
+			}, { action.value(nil) });
+		});
 	}
 
-	isValidWord { arg word;
+	checkValidWord { arg word, direction = "en-es",
+		rules = ["<n>", "<vblex>", "<adj>"], action;
+
 		// noun, standard verb, adjective
-		var poe = ["<n>", "<vblex>", "<adj>"];
 		// http://wiki.apertium.org/wiki/Monodix_basics
 		// http://wiki.apertium.org/wiki/List_of_symbols
-		var analysis;
-		var dict = "/usr/share/apertium/apertium-en-es/en-es.automorf.bin";
 
-		analysis = "echo \"%\" | lt-proc -a %".format(word, dict)
-		.unixCmdGetStdOut
-		.postln;
+		var dict = "/usr/share/apertium/apertium-en-es/%.automorf.bin"
+		.format(direction);
+		var tmpFile = PathName.tmp +/+ "dictesen%".format(UniqueID.next);
 
-		poe.do({ arg i; if(analysis.contains(i), { ^true }) });
-		^false;
+		"echo \"%\" | lt-proc -a % > %".format(word, dict, tmpFile)
+		.unixCmd({ arg res, pid;
+			var file, cmdOut, valid = false;
+			file = File.open(tmpFile, "r");
+			cmdOut = file.readAllString;
+			file.close;
+			block { arg break;
+				rules.do({ arg i;
+					if(cmdOut.contains(i), {
+						valid = true;
+						break.value;
+					})
+				});
+			};
+			action.value(valid);
+		});
 	}
 }
 
-
-// Freesound quark sync call
-
-+ FSReq {
-	getSync { arg objClass;
-		cmd.systemCmd;
-		^objClass.new(
-			File(filePath,"r").readAllString.postln;
-			Freesound.parseFunc.value(
-				File(filePath,"r").readAllString
-			)
-		); // return the object
-	}
-
-	*retrieveSync { arg uri, path;
-		var cmd;
-		cmd = "curl -H '%' '%'>'%'".format(FSReq.getHeader, uri, path);
-		cmd.postln;
-		^cmd.systemCmd; // return Error code
-	}
-}
 
 + FSSound {
-	*textSearchSync { arg query, filter, sort, params, action;
-		params = FSSound.initParams(params);
-		params.putAll(('query' : query, 'filter' : filter, 'sort' : sort));
-		^FSReq.new(Freesound.uri(\TEXT_SEARCH),params).getSync(FSPager);
-		// return the object
-	}
-
-	retrievePreviewSync { arg path, quality = "hq", format = "ogg";
+	retrievePreview{|path, action, quality = "hq", format = "ogg"|
 		var key = "%-%-%".format("preview",quality,format);
-		^FSReq.retrieveSync(
+		FSReq.retrieve(
 			this.previews.dict[key],
-			path +/+ this.previewFilename(format) // FIXED
-		); // return Error code
+			path +/+ this.previewFilename(format), // fixed
+			action
+		);
 	}
 }
 
