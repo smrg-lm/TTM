@@ -1,12 +1,11 @@
 TTM {
 	var <path;
-	var <folder;
 	var <soundsFolder = "fssounds";
 	var <tweets;
 	var <dictesen;
 	var <sounds;
 	var punct;
-	var task;
+	var searchFunc;
 
 	*new { arg path, folder = "TTM";
 		^super.new.init(path, folder);
@@ -24,10 +23,11 @@ TTM {
 			".", ",", ";", ":", "'", "`", "\"",
 			"(", ")", "[", "]", "<", ">", "{", "}",
 			"!", "¡", "?", "¿", "\\", "/", "|",
-			"*", "#", "@", "$", "-", "+"
+			"*", "#", "@", "$", "-", "+",
+			"\n", "\t", "\f"
 		];
 
-		this.prInitTask;
+		this.prInitSearchFunc;
 	}
 
 	initPath { arg p, f;
@@ -58,12 +58,21 @@ TTM {
 		});
 	}
 
-	start {
-		task.start;
+	search { arg param = 2;
+		searchFunc.value(param);
 	}
 
-	stop {
-		task.stop;
+	playWord { arg word, sound; // test
+		fork {
+			"\nINFO: Playing sound: % %\n".format(word, sound).warn;
+			Buffer.read(
+				Server.default,
+				(this.path +/+ this.soundsFolder +/+ sound.at(2)).postln,
+				action: { arg buf;
+					buf.play(true, 0.25);
+				}
+			);
+		}
 	}
 
 	getWords { arg string;
@@ -74,43 +83,65 @@ TTM {
 		^words;
 	}
 
-	prInitTask {
-		task = Task({
+	prInitSearchFunc {
+		searchFunc = { arg param; Routine.run({
 			var lastTweets, lastEsWords, lastEnWords, lastSounds;
 
-			inf.do({
-				lastTweets = lastEsWords = lastEnWords = lastSounds = nil;
-				lastTweets = tweets.search; // returns the last ones/nil
-				lastTweets.do({ arg i;
-					lastEsWords = lastEsWords ++ this.getWords(i.last);
-					lastEsWords.postln;
-				});
+			lastTweets = lastEsWords = lastEnWords = lastSounds = nil;
+			lastTweets = tweets.search; // returns the last ones/nil
 
-				lastEsWords.do({ arg i;
-					var word;
-					word = dictesen.addWord(i); // returns englishw/nil
-					if(word.notNil, {
-						lastEnWords = lastEnWords.add(word);
-					}, {
-						lastEsWords = lastEsWords.remove(i);
-					});
-				});
-
-				lastEnWords.do({ arg i;
-					sounds.search(i) !? { arg list; // last sounds/nil
-						lastSounds = lastSounds ++ list;
-					};
-				});
-
-				// send data, trigger something ...
-				$-.dup(20).join.postln;
-				lastTweets.postln;
-				lastEsWords.postln;
-				lastEnWords.postln;
-				lastSounds.postln;
-				60.wait; // hay que sacar el wait y hacer routines concurrentes.
+			lastTweets.do({ arg i;
+				lastEsWords = lastEsWords ++ this.getWords(i.last);
+				//lastEsWords.postln;
 			});
-		});
+
+			lastEsWords.do({ arg i;
+				var word, sound, startTime;
+
+				startTime = Process.elapsedTime;
+				// las llamadas sincrónicas bloquean sclang
+				// esta tarda extremadamente demasiado...
+				word = dictesen.addWord(i); // returns englishw/nil
+
+				if(word.notNil, {
+					lastEnWords = lastEnWords.add(word);
+
+					sounds.search(word) !? { arg list; // last sounds/nil
+						lastSounds = lastSounds ++ list;
+						sound = list.at(0); // test
+					};
+
+					if(sound.notNil, { // test
+						this.playWord(word, sound); // test
+						param = param - 1; // test
+						if(param < 1, { nil.yield }); // test
+						(Process.elapsedTime - startTime + 1).postln.wait;
+					}, {
+						"No sound found".warn;
+						(Process.elapsedTime - startTime + 1).postln.wait;
+					});
+				}, {
+					lastEsWords = lastEsWords.remove(i);
+				});
+			});
+
+			"*** FIN ***".warn;
+
+			/*
+			lastEnWords.do({ arg i;
+				sounds.search(i) !? { arg list; // last sounds/nil
+					lastSounds = lastSounds ++ list;
+				};
+			});
+
+			// send data, trigger something ...
+			$-.dup(20).join.postln;
+			lastTweets.postln;
+			lastEsWords.postln;
+			lastEnWords.postln;
+			lastSounds.postln;
+			*/
+		}, clock: TempoClock.new) };
 	}
 }
 
@@ -169,7 +200,7 @@ Sounds : TTMDB {
 		var fspager, indx, retrieved;
 
 		fspager = FSSound.textSearchSync(
-			query: word, filter: "type:wav",
+			query: word, filter: "type:wav duration:[20 TO 120]", sort: "duration_asc",
 			params: (page: 2)
 		);
 		if(fspager.dict.includesKey("count").not, { ^nil }); //{"detail":"Not found"}
@@ -211,12 +242,12 @@ Tweets : TTMDB {
 		^super.new.init(path, file)
 	}
 
-	buildQuery { arg since, hashtag ...or;
-		var n = 20;
+	buildQuery { arg /*since*/ n = 1, hashtag ...or;
+		//var n = 20;
 		// "#hashtag"
 		// "2015-12-21"
 		// "@a", "filter", ...
-		query = "since:" ++ since;
+		query = ""; //"since:" ++ Date.getDate.format("%Y-%m-%d");
 		query = query + hashtag;
 		or.do { arg i; query = query + "OR" + i };
 		query = "t search all \"%\" -n % --csv".format(query, n);
@@ -227,7 +258,7 @@ Tweets : TTMDB {
 
 		systemCmd(query + ">" + "/tmp/tmp.csv");
 		csvfile = CSVFileReader.read("/tmp/tmp.csv"); // *
-		if(csvfile.isNil, { "%: No results found".format(this).inform; ^this });
+		if(csvfile.isNil, { "%: No results found".format(this).inform; ^nil });
 		csvfile = csvfile.drop(1);
 		csvfile = csvfile.collect({ arg i; i[0] = i[0].asSymbol; i });
 		existingIDs = data.flop.at(0);
