@@ -4,6 +4,8 @@ TTM {
 	var <tweets;
 	var <dictesen;
 	var <sounds;
+	var <wplayer;
+
 	var punct;
 
 	*new { arg path, folder = "TTM";
@@ -17,13 +19,14 @@ TTM {
 		tweets = Tweets.new(path);
 		dictesen = Dictesen.new(path);
 		sounds = Sounds.new(path, soundsFolder: soundsFolder);
+		wplayer = WordPlayer(this, Server.default);
 
 		punct = [ // very basic, because unicode lack
 			".", ",", ";", ":", "'", "`", "\"",
 			"(", ")", "[", "]", "<", ">", "{", "}",
 			"!", "¡", "?", "¿", "\\", "/", "|",
 			"*", "#", "@", "$", "-", "+",
-			"\n", "\t", "\f"
+			"\n", "\t", "\f", "http", "https" // ...
 		];
 	}
 
@@ -58,45 +61,45 @@ TTM {
 	search { arg param = 2;
 		var lastTweets, lastWords, lastSounds;
 
-		tweets.search({ arg tweetsList; // tweets/nil
+		tweets.search({ arg tweetsList;
 			lastTweets = tweetsList;
 
 			if(lastTweets.notNil, {
 				lastTweets.do({ arg i;
+					"Nuevo tweet: %".format(i.last).warn;
 					lastWords = lastWords ++ this.getWords(i.last);
 				});
 				lastWords.do({ arg palabra;
-					dictesen.addWord(palabra, action: { arg word; //word(en/es)/nil
+					"Palabra a traducir: %".format(palabra.toUpper).warn;
+					dictesen.addWord(palabra, action: { arg word; //word(en/es)
 						if(word.notNil, {
-							sounds.search(word, 15.rand, action: { arg soundList; // last sounds/nil
-								var sound;
-								if(soundList.notNil, {
-									lastSounds = lastSounds ++ soundList;
-									sound = soundList.at(0); // test
-									this.playWord(word, sound); // test
+							sounds.search(word, 15.rand, action: { arg sound;
+								if(sound.notNil, {
+									lastSounds = lastSounds.add(sound);
+									"Playing word: % sound: %\n".format(
+										word.toUpper, sound).warn;
+									wplayer.pushSound(sound, 30, 0.4); // ver lifeTime
 								});
 							});
 						});
 					});
 				});
 			}, {
-				"No se encontraron nuevos tweets".warn;
+				// que el plan b no entre al principio
+				// que el plan b entre si se producen "tanto" silencio
+				// tal vez que el plan b aparezca de vez en cuando.
+				// tal vez mejor, sacar el plan b automático y disparalo manualmente.
+				this.planB;
 			});
-
 		});
 	}
 
-	playWord { arg word, sound; // test
-		fork {
-			"Playing word: % sound: %\n".format(word.toUpper, sound).warn;
-			Buffer.read(
-				Server.default,
-				(this.path +/+ this.soundsFolder +/+ sound.at(2)).postln,
-				action: { arg buf;
-					buf.play(true, 0.25);
-				}
-			);
-		}
+	planB {
+		"No se encontraron nuevos tweets".warn;
+		// Plan B :-) :-| :-/ :-( :'S
+		sounds.data.scramble[0..2].do({ arg i;
+			wplayer.pushSound(i, 5, 0.1); // ver lifeTime
+		});
 	}
 
 	getWords { arg string;
@@ -105,6 +108,204 @@ TTM {
 		words = string.split($ );
 		words.removeAllSuchThat({ arg i; i.isEmpty; });
 		^words;
+	}
+}
+
+WordPlayer {
+	//var <>lifeTime = 60;
+	var <ttm;
+	var <soundsPool;
+	var <soundsList;
+	var <server;
+
+	var playLoop;
+	var <beats = 0;
+	// agreagar limitador de palabras simultáneas
+
+	*new { arg ttm, server;
+		^super.new.init(ttm, server);
+	}
+
+	init { arg t, s;
+		ttm = t;
+		server = s;
+		soundsList = List.new;
+		WordSound.buildDefs;
+	}
+
+	start {
+		playLoop = Routine.run({
+			// init just in case
+			soundsList.do({ arg i, j;
+				"WordPlayer init %".format(i.word.toUpper).warn;
+				i.play(rrand(5, 30))
+			});
+
+			loop {
+				beats = thisThread.beats;
+
+				soundsList.do({ arg i, j;
+					// play new
+					if(i.isPlaying.not, {
+						"WordPlayer start %".format(i.word.toUpper).warn;
+						i.play(rrand(5, 15))
+					});
+
+					// life time
+					if(beats - i.additionTime > i.lifeTime, {
+						soundsList.removeAt(j);
+						"WordPlayer release %".format(i.word.toUpper).warn;
+						i.release(rrand(5, 15));
+					})
+				});
+				1.wait;
+			}
+		}, clock: TempoClock(1, 0));
+	}
+
+	stop {
+		playLoop.stop;
+	}
+
+	pushSound { arg soundData, lifeTime = 30, amp = 0.125, play = false;
+		soundsList.addFirst(
+			WordSound(
+				server, ttm.path +/+ ttm.soundsFolder,
+				soundData, beats, play).lifeTime_(lifeTime).amp_(amp);
+		);
+	}
+
+	popSound { arg sound, fadeOut = 1; // no pun intended...
+		var wsound = soundsList.pop;
+		wsound.release(fadeOut);
+	}
+}
+
+WordSound {
+	var <word;
+	var <id;
+	var <fileName;
+	var <date;
+	var <folder;
+	var <additionTime;
+
+	var <server;
+	var <defName;
+	var <synth;
+	var <out = 0;
+	var <buffer;
+
+	var <>lifeTime = 60;
+	var <>amp = 0.125;
+
+	var buffReady = false;
+
+	*new { arg server, folder, soundData, additionTime = 0, play = false;
+		^super.new.init(server, folder, soundData, additionTime, play);
+	}
+
+	init { arg s, f, d, a, p;
+		server = s;
+		folder = f;
+		word = d[0].asString;
+		id = d[1];
+		fileName = d[2];
+		date = d[3];
+		additionTime = a;
+		buffer = Buffer.read(
+			server,
+			folder +/+ fileName,
+			action: { arg b;
+				defName = "wordSynth" ++ b.numChannels;
+				b.normalize; // anda?
+				buffReady = true;
+				if(p, { this.play });
+			}
+		);
+	}
+
+	play { arg fadeIn = 0.02;
+		if(buffReady.not, {
+			fork {
+				"*Buffer not ready test*".warn;
+				1.wait;
+				this.play(fadeIn);
+			};
+			^this
+		});
+
+		"% play %".format(this, buffer).warn;
+		"numChannels %".format(buffer.numChannels).warn;
+
+		if(synth.isNil, {
+			synth = Synth(defName, [out: out, buf: buffer, amp: amp, fadeIn: fadeIn]);
+		}, {
+			synth.run(1);
+		});
+	}
+
+	isPlaying {
+		if(synth.notNil, { ^true }, { ^false });
+	}
+
+	pause {
+		synth.run(0); // click
+	}
+
+	release { arg fadeOut = 0.02;
+		synth.set(\fadeOut, fadeOut, \gate, 0);
+		synth = nil;
+		fork { fadeOut.wait; buffer.free; };
+	}
+
+	gui {}
+
+	*buildDefs {
+		[1, 2].do({ arg n;
+			SynthDef("wordSynth" ++ n, {
+				arg out, buf, amp = 0.2, gate = 1,
+				fadeIn = 0.02, fadeOut = 0.02;
+
+				var src, env, snd;
+				var trigger, gdur, rate, pan, pos, mul;
+
+				// too much rand, like NMS
+				trigger = Dust.kr(5);
+				gdur = 1; //TRand.kr(BufDur.ir(buf)/1.5, BufDur.ir(buf), trigger);
+				rate = 1; //TRand.kr(0.8, 1.2, trigger);
+				pos = TRand.kr(0, 0.25, trigger);
+				pan = LFNoise2.kr(0.1).range(-0.75, 0.75); //TRand.kr(-0.5, 0.5, trigger);
+				mul = TRand.kr(0.25, 1, trigger);
+
+				/*
+				if(n > 1, {
+					src = GrainBuf.ar(
+						n, trigger,
+						gdur, buf,
+						BufRateScale.kr(buf) * rate,
+						pos: pos,
+						pan: pan,
+						mul: mul
+					);
+				}, {
+					src = GrainBuf.ar(
+						n, trigger,
+						gdur, buf,
+						BufRateScale.kr(buf) * rate,
+						pos: pos,
+						mul: mul
+					);
+					src = Pan2.ar(src, pan);
+				});
+				*/
+
+				src = PlayBuf.ar(n, buf, BufRateScale.kr(buf) * rate, loop: 1);
+				env = EnvGen.kr(Env.asr(fadeIn, 1, fadeOut), gate, doneAction: 2);
+				snd = src * env * amp;
+
+				Out.ar(out, snd);
+			}).add;
+		});
 	}
 }
 
@@ -131,7 +332,7 @@ TTMDB {
 		data = data ? [];
 	}
 
-	write { // fix: siempre vuelve a escribir todo, MUTEX?
+	write { // fix: siempre vuelve a escribir todo, mutex?
 		var dataFile;
 
 		dataFile = File(path +/+ fileName, "w");
@@ -163,12 +364,13 @@ Sounds : TTMDB {
 		var fspager, indx, retrieved;
 
 		FSSound.textSearch(
-			query: word, filter: "type:wav duration:[20 TO 120]", sort: "duration_asc",
+			query: word, filter: "type:wav duration:[10 TO 120]", sort: "duration_asc",
 			params: (page: 2), action: { arg fspager;
 				if(fspager.dict.includesKey("results").not or:
 					{ fspager.results.size <= index } or:
 					{ fspager.results.size < 1 }, {
-						"%: no se encontraron resultados".format(this).warn;
+						"%: no se encontraron resultados para % index %"
+						.format(this, word.toUpper, index).warn;
 						action.value(nil);
 					}, {
 						var fssound = fspager.at(index);
@@ -179,17 +381,18 @@ Sounds : TTMDB {
 								path +/+ soundsFolder,
 								action: {
 									if(File.exists(filePath), {
-										retrieved = retrieved.add([
+										retrieved = [
 											word.asSymbol,
 											fssound.id.asSymbol,
 											fssound.previewFilename,
 											Date.getDate.asSortableString
-										]);
-										data = data.add(retrieved.last);
-										this.write; // MUTEX
+										];
+										data = data.add(retrieved);
+										this.write;
 										action.value(retrieved);
 									}, {
-										"%: error en la descarga".format(this).warn;
+										"%: error en la descarga para %"
+										.format(this, word.toUpper).warn;
 									});
 								},
 								quality: "hq",
@@ -197,6 +400,14 @@ Sounds : TTMDB {
 							);
 						}, {
 							"%: el archivo ya fue descargado".format(this).warn;
+
+							"DEVUELVE %".format(
+								data.at(data.flat.indexOf(fssound.id.asSymbol) div: 4)
+							).postln;
+
+							action.value(
+								data.at(data.flat.indexOf(fssound.id.asSymbol) div: 4)
+							);
 						});
 				});
 		});
@@ -271,7 +482,7 @@ Dictesen : TTMDB {
 						rules, { arg valid;
 							if(valid, {
 								this.data.put(palabra, word);
-								this.write; // MUTEX
+								this.write;
 								action.value(word);
 							}, {
 								action.value(nil);
