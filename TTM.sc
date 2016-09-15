@@ -574,6 +574,41 @@ Dictesen : TTMDB {
 	}
 }
 
++ FSReq {
+	init{|anUrl, params, method="GET"|
+		var paramsString, separator = "?";
+		url = anUrl;
+		filePath = PathName.tmp ++ "fs_" ++ UniqueID.next ++ ".txt";
+		params = params?IdentityDictionary.new;
+		paramsString = params.keys(Array).collect({|k|
+			k.asString ++ "=" ++ params[k].asString.urlEncode}).join("&");
+		if (url.contains(separator)){separator = "&"};
+		cmd = "curl -H '%' '%'>% ".format(
+			FSReq.getHeader, this.url ++ separator ++ paramsString, filePath
+		);
+		//cmd.postln;
+	}
+
+	get{|action, objClass|
+		cmd.unixCmd({|res,pid|
+			var result = objClass.new(
+				File(filePath,"r").readAllString; //.postln;
+				Freesound.parseFunc.value(
+					File(filePath,"r").readAllString
+				)
+			);
+			action.value(result);
+		});
+	}
+
+	*retrieve{|uri,path,action|
+		var cmd;
+		cmd = "curl -H '%' '%'>'%'".format(FSReq.getHeader, uri, path);
+		//cmd.postln;
+		cmd.unixCmd(action);
+	}
+}
+
 + CSVFileReader {
 	next {
 		var c, record, string = String.new;
