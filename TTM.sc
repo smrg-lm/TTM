@@ -134,6 +134,7 @@ WordPlayer {
 	}
 
 	start {
+		if(playLoop.notNil, { ^this });
 		playLoop = Routine.run({
 			// init just in case
 			soundsList.do({ arg i, j;
@@ -165,6 +166,7 @@ WordPlayer {
 
 	stop {
 		playLoop.stop;
+		playLoop = nil;
 	}
 
 	pushSound { arg soundData, lifeTime = 30, amp = 0.125, play = false;
@@ -313,6 +315,8 @@ TTMDB {
 	var <data;
 	var <path;
 	var <fileName;
+	var <cpubind;
+	var numaCmd = "";
 
 	init { arg p, f;
 		var dataFile;
@@ -338,6 +342,10 @@ TTMDB {
 		dataFile = File(path +/+ fileName, "w");
 		dataFile.write(data.asCompileString);
 		dataFile.close;
+	}
+
+	cpubind_ { arg cpus = "+0"; // +0-3,n-m
+		numaCmd = "numactl --physcpubind=%".format(cpus);
 	}
 }
 
@@ -500,7 +508,10 @@ Dictesen : TTMDB {
 	translate { arg palabra, direction = "es-en", action;
 		var tmpFile = PathName.tmp +/+ "dictesen%".format(UniqueID.next);
 
-		"echo \"%\" | apertium % > %".format(palabra, direction, tmpFile)
+		"*** *** ** * TRANSLATE * ** *** ***".postln;
+		//"echo \"%\" | apertium % > %".format(palabra, direction, tmpFile)
+		"% echo \"%\" | % apertium % > %"
+		.format(numaCmd, palabra, numaCmd, direction, tmpFile)
 		.unixCmd({ arg res, pid;
 			var file, cmdOut;
 			file = File.open(tmpFile, "r");
@@ -528,7 +539,11 @@ Dictesen : TTMDB {
 		.format(direction);
 		var tmpFile = PathName.tmp +/+ "dictesen%".format(UniqueID.next);
 
-		"echo \"%\" | lt-proc -a % > %".format(word, dict, tmpFile)
+		"*** *** ** * CHECK VALID WORD * ** *** ***".postln;
+
+		//"echo \"%\" | lt-proc -a % > %".format(word, dict, tmpFile)
+		"% echo \"%\" | % lt-proc -a % > %"
+		.format(numaCmd, word, numaCmd, dict, tmpFile)
 		.unixCmd({ arg res, pid;
 			var file, cmdOut, valid = false;
 			file = File.open(tmpFile, "r");
