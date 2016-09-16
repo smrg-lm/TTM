@@ -330,42 +330,24 @@ WordSound {
 				arg out, buf, amp = 0.2, gate = 1,
 				fadeIn = 0.02, fadeOut = 0.02;
 
-				var src, env, snd;
-				var trigger, gdur, rate, pan, pos, mul;
+				var src, src2, env, snd;
 
-				// too much rand, like NMS
-				trigger = Dust.kr(5);
-				gdur = 1; //TRand.kr(BufDur.ir(buf)/1.5, BufDur.ir(buf), trigger);
-				rate = 1; //TRand.kr(0.8, 1.2, trigger);
-				pos = TRand.kr(0, 0.25, trigger);
-				pan = LFNoise2.kr(0.1).range(-0.75, 0.75); //TRand.kr(-0.5, 0.5, trigger);
-				mul = TRand.kr(0.25, 1, trigger);
-
-				/*
-				if(n > 1, {
-					src = GrainBuf.ar(
-						n, trigger,
-						gdur, buf,
-						BufRateScale.kr(buf) * rate,
-						pos: pos,
-						pan: pan,
-						mul: mul
-					);
-				}, {
-					src = GrainBuf.ar(
-						n, trigger,
-						gdur, buf,
-						BufRateScale.kr(buf) * rate,
-						pos: pos,
-						mul: mul
-					);
-					src = Pan2.ar(src, pan);
+				src = 4.collect({
+					PlayBuf.ar(
+						n, buf, BufRateScale.kr(buf),
+						startPos: Rand(0, BufFrames.kr(buf)), loop: 1
+					) * 0.25;
 				});
-				*/
+				if(n == 2, { src2 = src.sum * 0.5 }, { src2 = src });
 
-				src = PlayBuf.ar(n, buf, BufRateScale.kr(buf) * rate, loop: 1);
+				src2 = GrainIn.ar(
+					2, Dust.kr(LFNoise1.kr(0.5).range(2, 20)),
+					LFNoise2.kr(0.5).range(0.01, 1),
+					src2, LFNoise2.kr(1), mul: 0.1
+				);
+
 				env = EnvGen.kr(Env.asr(fadeIn, 1, fadeOut), gate, doneAction: 2);
-				snd = src * env * amp;
+				snd = src + src2 * env * amp;
 
 				Out.ar(out, snd);
 			}).add;
