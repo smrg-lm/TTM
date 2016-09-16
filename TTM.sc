@@ -574,7 +574,7 @@ Dictesen : TTMDB {
 		"*** *** ** * TRANSLATE * ** *** ***".postln;
 		//"echo \"%\" | apertium % > %".format(palabra, direction, tmpFile)
 		"sleep %; % echo \"%\" | % apertium % > %"
-		.format(1.0.rand, numaCmd, palabra, numaCmd, direction, tmpFile)
+		.format(2.0.rand, numaCmd, palabra, numaCmd + "nice", direction, tmpFile)
 		.unixCmd({ arg res, pid;
 			var file, cmdOut;
 			file = File.open(tmpFile, "r");
@@ -605,7 +605,7 @@ Dictesen : TTMDB {
 		"*** *** ** * CHECK VALID WORD * ** *** ***".postln;
 		//"echo \"%\" | lt-proc -a % > %".format(word, dict, tmpFile)
 		"sleep %; % echo \"%\" | % lt-proc -a % > %"
-		.format(1.0.rand, numaCmd, word, numaCmd, dict, tmpFile)
+		.format(2.0.rand, numaCmd, word, numaCmd + "nice", dict, tmpFile)
 		.unixCmd({ arg res, pid;
 			var file, cmdOut, valid = false;
 			file = File.open(tmpFile, "r");
