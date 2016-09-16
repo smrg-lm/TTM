@@ -5,6 +5,7 @@ TTM {
 	var <dictesen;
 	var <sounds;
 	var <wplayer;
+	var <wprinter;
 
 	var punct;
 
@@ -20,6 +21,7 @@ TTM {
 		dictesen = Dictesen.new(path);
 		sounds = Sounds.new(path, soundsFolder: soundsFolder);
 		wplayer = WordPlayer(this, Server.default);
+		wprinter = WordPrinter.new;
 
 		punct = [ // very basic, because unicode lack
 			".", ",", ";", ":", "'", "`", "\"",
@@ -66,18 +68,20 @@ TTM {
 
 			if(lastTweets.notNil, {
 				lastTweets.do({ arg i;
-					"Nuevo tweet: %".format(i.last).warn;
+					//"Nuevo tweet: %".format(i.last).warn;
+					wprinter.print(" [ De %: % ] ".format(i[2], i[3]));
 					lastWords = lastWords ++ this.getWords(i.last);
 				});
 				lastWords.do({ arg palabra;
-					"Palabra a traducir: %".format(palabra.toUpper).warn;
+					//"Palabra a traducir: %".format(palabra.toUpper).warn;
 					dictesen.addWord(palabra, action: { arg word; //word(en/es)
 						if(word.notNil, {
 							sounds.search(word, 15.rand, action: { arg sound;
 								if(sound.notNil, {
 									lastSounds = lastSounds.add(sound);
-									"Playing word: % sound: %\n".format(
-										word.toUpper, sound).warn;
+									//"Playing word: % sound: %\n".format(
+									//	word.toUpper, sound).warn;
+									wprinter.print(" [ %: % ] ".format(palabra, sound[2]));
 									wplayer.pushSound(sound, 30, 0.4); // ver lifeTime
 								});
 							});
@@ -89,15 +93,16 @@ TTM {
 				// que el plan b entre si se producen "tanto" silencio
 				// tal vez que el plan b aparezca de vez en cuando.
 				// tal vez mejor, sacar el plan b automático y disparalo manualmente.
-				this.planB;
+				"No se encontraron nuevos tweets".warn;
+				//this.planB;
 			});
 		});
 	}
 
 	planB {
-		"No se encontraron nuevos tweets".warn;
 		// Plan B :-) :-| :-/ :-( :'S
 		sounds.data.scramble[0..2].do({ arg i;
+			wprinter.print(" [ Plan B: % ] ".format(i[2]));
 			wplayer.pushSound(i, 5, 0.1); // ver lifeTime
 		});
 	}
@@ -108,6 +113,63 @@ TTM {
 		words = string.split($ );
 		words.removeAllSuchThat({ arg i; i.isEmpty; });
 		^words;
+	}
+}
+
+WordPrinter {
+	var <tty;
+	var pipe;
+	var printLoop;
+	var queue;
+	var <>slow = 0.1;
+	var <>fast = 0.02;
+
+	*new { arg tty = "/dev/pts/0";
+		^super.new.init(tty);
+	}
+
+	init { arg t;
+		tty = t;
+		this.tty_(t);
+		queue = List.new;
+	}
+
+	close {
+		this.stop;
+		pipe.close;
+	}
+
+	tty_ { arg string;
+		if(pipe.notNil, { pipe.close });
+		tty = string;
+		pipe = Pipe("tee %".format(tty), "w");
+	}
+
+	print { arg msg;
+		msg.do(queue.addFirst(_));
+	}
+
+	start {
+		printLoop = Routine.run({
+			loop {
+				if(queue.isEmpty, {
+					pipe.putChar($*);
+					pipe.flush;
+					slow.wait;
+				}, {
+					while({ queue.notEmpty }, {
+						pipe.putChar(queue.pop);
+						pipe.flush;
+						fast.wait;
+					});
+				});
+			}
+		}, clock: TempoClock(1, 0));
+	}
+
+	stop {
+		printLoop.stop;
+		printLoop = nil;
 	}
 }
 
@@ -458,11 +520,12 @@ Tweets : TTMDB {
 				append = csvfile.reject({ arg i;
 					existingIDs.includes(i.at(0))
 				});
-				data = data ++ append;
-				this.write;
 				if(append.isEmpty, {
 					action.value(nil)
 				}, {
+					append = append.collect({ arg i; i[3] = i[3].replace($\n, " "); i });
+					data = data ++ append; //.at(3); ???
+					this.write;
 					action.value(append)
 				});
 			});
@@ -540,7 +603,6 @@ Dictesen : TTMDB {
 		var tmpFile = PathName.tmp +/+ "dictesen%".format(UniqueID.next);
 
 		"*** *** ** * CHECK VALID WORD * ** *** ***".postln;
-
 		//"echo \"%\" | lt-proc -a % > %".format(word, dict, tmpFile)
 		"sleep %; % echo \"%\" | % lt-proc -a % > %"
 		.format(1.0.rand, numaCmd, word, numaCmd, dict, tmpFile)
