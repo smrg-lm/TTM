@@ -81,7 +81,8 @@ TTM {
 									lastSounds = lastSounds.add(sound);
 									//"Playing word: % sound: %\n".format(
 									//	word.toUpper, sound).warn;
-									wprinter.print(" [ %: % ] ".format(palabra, sound[2]));
+									wprinter.print(" [ Palabra: % | Sonido: % ] "
+										.format(palabra, sound[2]));
 									wplayer.pushSound(sound, 30, 0.4); // ver lifeTime
 								});
 							});
@@ -99,11 +100,41 @@ TTM {
 		});
 	}
 
-	planB {
-		// Plan B :-) :-| :-/ :-( :'S
-		sounds.data.scramble[0..2].do({ arg i;
-			wprinter.print(" [ Plan B: % ] ".format(i[2]));
-			wplayer.pushSound(i, 5, 0.1); // ver lifeTime
+	nuevaPalabra { arg palabra;
+		dictesen.addWord(palabra, action: { arg word; //word(en/es)
+			if(word.notNil, {
+				sounds.search(word, 15.rand, action: { arg sound;
+					if(sound.notNil, {
+						wprinter.print(" [ Palabra: % | Sonido: % ] "
+							.format(palabra, sound[2]));
+						wplayer.pushSound(sound, 30, 0.4); // ver lifeTime
+					});
+				});
+			});
+		});
+	}
+
+	planB { arg palabra;
+		var word, indx, sound;
+
+		if(palabra.isNil, {
+			// Plan B :-) :-| :-/ :-( :'S
+			sounds.data.scramble[0..2].do({ arg i;
+				wprinter.print(" [ Sonido : % ] ".format(i[2]));
+				wplayer.pushSound(i, 5, 0.1); // ver lifeTime
+			});
+		}, {
+			word = dictesen.at(palabra);
+			if(word.notNil, {
+				indx = sounds.data.flop.at(0).indexOf(word); // english words
+				sound = sounds.data.at(indx div: 4);
+				wprinter.print(
+					" [ Palabra: % | Sonido: % ] ".format(palabra, sound[2])
+				);
+				wplayer.pushSound(sound, 30, 0.1);
+			}, {
+				"La palabra % no está en el diccionario".format(palabra.toUpper).warn;
+			});
 		});
 	}
 
