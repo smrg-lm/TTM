@@ -69,7 +69,7 @@ TTM {
 			if(lastTweets.notNil, {
 				lastTweets.do({ arg i;
 					//"Nuevo tweet: %".format(i.last).warn;
-					wprinter.print(" [ De %: % ] ".format(i[2], i[3]));
+					wprinter.print(" [ % | % ] ".format(i[2], i[3]));
 					lastWords = lastWords ++ this.getWords(i.last);
 				});
 				lastWords.do({ arg palabra;
@@ -81,8 +81,8 @@ TTM {
 									lastSounds = lastSounds.add(sound);
 									//"Playing word: % sound: %\n".format(
 									//	word.toUpper, sound).warn;
-									wprinter.print(" [ Palabra: % | Sonido: % ] "
-										.format(palabra, sound[2]));
+									wprinter.print(" [ % | % ] "
+										.format(palabra.toUpper, sound[2]));
 									wplayer.pushSound(sound, 30, 0.4); // ver lifeTime
 								});
 							});
@@ -90,10 +90,6 @@ TTM {
 					});
 				});
 			}, {
-				// que el plan b no entre al principio
-				// que el plan b entre si se producen "tanto" silencio
-				// tal vez que el plan b aparezca de vez en cuando.
-				// tal vez mejor, sacar el plan b automático y disparalo manualmente.
 				"No se encontraron nuevos tweets".warn;
 				//this.planB;
 			});
@@ -105,7 +101,7 @@ TTM {
 			if(word.notNil, {
 				sounds.search(word, 15.rand, action: { arg sound;
 					if(sound.notNil, {
-						wprinter.print(" [ Palabra: % | Sonido: % ] "
+						wprinter.print(" [ % | % ] "
 							.format(palabra, sound[2]));
 						wplayer.pushSound(sound, 30, 0.4); // ver lifeTime
 					});
@@ -120,7 +116,7 @@ TTM {
 		if(palabra.isNil, {
 			// Plan B :-) :-| :-/ :-( :'S
 			sounds.data.scramble[0..2].do({ arg i;
-				wprinter.print(" [ Sonido : % ] ".format(i[2]));
+				wprinter.print(" [ | % ] ".format(i[2]));
 				wplayer.pushSound(i, 5, 0.1); // ver lifeTime
 			});
 		}, {
@@ -129,7 +125,7 @@ TTM {
 				indx = sounds.data.flop.at(0).indexOf(word); // english words
 				sound = sounds.data.at(indx div: 4);
 				wprinter.print(
-					" [ Palabra: % | Sonido: % ] ".format(palabra, sound[2])
+					" [ % | % ] ".format(palabra, sound[2])
 				);
 				wplayer.pushSound(sound, 30, 0.1);
 			}, {
@@ -547,12 +543,17 @@ Tweets : TTMDB {
 }
 
 Dictesen : TTMDB {
+	var apertiumTaskManager2000; // ok, nothing seems to work
+	var <>rwps = 0.1; // 10 wps
+	var wordsList;
+
 	*new { arg path, file = "dictesen.db";
 		^super.new.init(path, file)
 	}
 
 	initData {
 		data = data ? Dictionary.new;
+		wordsList = List.new;
 	}
 
 	addWord { arg palabra, direction = "es-en",
@@ -581,7 +582,26 @@ Dictesen : TTMDB {
 		});
 	}
 
+	start {
+		if(apertiumTaskManager2000.notNil, { ^this });
+		apertiumTaskManager2000 = Routine.run({
+			loop {
+				wordsList.pop !? { arg call; this.translateCall(*call) };
+				rwps.wait;
+			}
+		}, clock: TempoClock.new);
+	}
+
+	stop {
+		apertiumTaskManager2000.stop;
+		apertiumTaskManager2000 = nil;
+	}
+
 	translate { arg palabra, direction = "es-en", action;
+		wordsList.addFirst([palabra, direction, action]);
+	}
+
+	translateCall { arg palabra, direction = "es-en", action;
 		var tmpFile = PathName.tmp +/+ "dictesen%".format(UniqueID.next);
 
 		"*** *** ** * TRANSLATE * ** *** ***".postln;
