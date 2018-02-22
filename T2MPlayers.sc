@@ -114,11 +114,12 @@ WordPlayer {
 		playLoop = nil;
 	}
 
-	pushSound { arg soundData, lifeTime = 30, amp = 0.125, play = false;
+	// TASTE PARA ANEW
+	pushSound { arg soundData, taste, lifeTime = 30, amp = 0.125, play = false;
 		soundsList.addFirst(
 			WordSound(
 				server, t2m.path +/+ t2m.soundsFolder,
-				soundData, beats, play).lifeTime_(lifeTime).amp_(amp);
+				soundData, taste, beats, play).lifeTime_(lifeTime).amp_(amp);
 		);
 	}
 
@@ -147,18 +148,29 @@ WordSound {
 
 	var buffReady = false;
 
-	*new { arg server, folder, soundData, additionTime = 0, play = false;
-		^super.new.init(server, folder, soundData, additionTime, play);
+	// TASTE PARA ANEW
+	var <taste;
+	var <group;
+	var <internalBus;
+	var <synth2;
+
+	// TASTE PARA ANEW
+	*new { arg server, folder, soundData, taste, additionTime = 0, play = false;
+		^super.new.init(server, folder, soundData, taste, additionTime, play);
 	}
 
-	init { arg s, f, d, a, p;
+	// TASTE PARA ANEW
+	init { arg s, f, d, t, a, p;
 		server = s;
 		folder = f;
 		word = d[0].asString;
 		id = d[1];
 		fileName = d[2];
 		date = d[3];
+		taste = t.asString; // TASTE PARA ANEW
 		additionTime = a;
+		group = Group.new(server); // TASTE PARA ANEW
+		internalBus = Bus.audio(server, 2); // TASTE PARA ANEW
 		buffer = Buffer.read(
 			server,
 			folder +/+ fileName,
@@ -185,9 +197,13 @@ WordSound {
 		"numChannels %".format(buffer.numChannels).warn;
 
 		if(synth.isNil, {
-			synth = Synth(defName, [out: out, buf: buffer, amp: amp, fadeIn: fadeIn]);
+			// TASTE PARA ANEW
+			if(taste == nil.asString, { this.amp = this.amp * (1/16); });
+			synth = Synth(defName, [out: internalBus, buf: buffer, amp: amp, fadeIn: fadeIn], this.group);
+			synth2 = Synth(taste, [in: internalBus, out: out], this.group, 'addToTail'); // TASTE PARA ANEW
 		}, {
 			synth.run(1);
+			synth2.run(1); // TASTE PARA ANEW
 		});
 	}
 
@@ -197,12 +213,18 @@ WordSound {
 
 	pause {
 		synth.run(0); // click
+		synth2.run(0); // TASTE PARA ANEW
 	}
 
 	release { arg fadeOut = 0.02;
 		synth.set(\fadeOut, fadeOut, \gate, 0);
 		synth = nil;
-		fork { fadeOut.wait; buffer.free; };
+		fork {
+			fadeOut.wait;
+			buffer.free;
+			internalBus.free; // TASTE PARA ANEW
+			group.free; // synth2 free
+		};
 	}
 
 	gui {}
@@ -235,5 +257,47 @@ WordSound {
 				Out.ar(out, snd);
 			}).add;
 		});
+
+		// TASTE PARA ANEW
+		SynthDef(\bitter, { arg in, out;
+			var sig;
+
+			sig = In.ar(in, 2);
+			sig = PitchShift.ar(sig, 0.2, LFNoise2.kr(0.2).range(0.01, 0.2), [0.05, 0.1]);
+
+			Out.ar(out, sig);
+		}).add;
+
+		SynthDef(\acid, { arg in, out;
+			var sig;
+
+			sig = In.ar(in, 2);
+			sig = PitchShift.ar(sig, 0.2, LFNoise2.kr(0.8).range(2, 4), [0.5, 1]);
+
+			Out.ar(out, sig);
+		}).add;
+
+		SynthDef(\salty, { arg in, out;
+			var sig;
+
+			sig = In.ar(in, 2);
+			sig = sig * EnvGen.kr(Env.perc(0.01, 0.5), Impulse.kr(LFNoise2.kr(2!2).range(1, 3)));
+			sig = CombC.ar(sig, 0.01, 0.019, mul: 0.7);
+			Out.ar(out, sig);
+		}).add;
+
+		SynthDef(\sweet, { arg in, out;
+			var sig;
+
+			sig = In.ar(in, 2);
+			sig = sig * EnvGen.kr(Env.sine(2), Impulse.kr(LFNoise2.kr(0.1!2).range(0.25, 1)));
+			sig = CombC.ar(sig, 0.01, 0.007, mul: 0.5);
+
+			Out.ar(out, sig);
+		}).add;
+
+		SynthDef(\nil, { arg in, out;
+			Out.ar(out, In.ar(in, 2));
+		}).add;
 	}
 }

@@ -72,11 +72,16 @@ T2M {
 						words.do({ arg word;
 							sounds.search(word, 15.rand, action: { arg sound;
 								if(sound.notNil, {
+									// TASTE PARA ANEW
+									var taste;
+									taste = ANEW.taste(word).asString;
+
 									//"Playing word: % sound: %\n".format(
 									//	word.toUpper, sound).warn;
-									wprinter.print(" [ % | % ] "
-										.format(word.toUpper, sound[2]));
-									wplayer.pushSound(sound, 30, 0.4); // ver lifeTime
+									wprinter.print(" [ % | % | % ] "
+										.format(word.toUpper, taste.toUpper, sound[2]));
+
+									wplayer.pushSound(sound, taste, 30, 0.4); // ver lifeTime
 								});
 							});
 						});
