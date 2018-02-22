@@ -4,7 +4,23 @@ ANEW {
 	classvar data;
 
 	*at { arg word;
-		^data.at(word.asSymbol);
+		^data.at(word.toLower.asSymbol);
+	}
+
+	*taste { arg word;
+		var vec, ret;
+
+		vec = ANEW.at(word);
+		if(vec.notNil, {
+			ret = case(
+				{ (vec[0] <= 5) && (vec[1] <= 5) }, { "bitter" },
+				{ (vec[0] >= 5) && (vec[1] <= 5) }, { "sweet" },
+				{ (vec[0] >= 5) && (vec[1] >= 5) }, { "salty" },
+				{ (vec[0] <= 5) && (vec[1] >= 5) }, { "acid" },
+			);
+		});
+
+		^ret;
 	}
 
 	*initClass {
