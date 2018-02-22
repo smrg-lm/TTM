@@ -270,7 +270,6 @@ TastePlayer {
 					pianoteqPlayer.setControl(\hammerHardPiano, 65);
 					pianoteqPlayer.setControl(\hammerHardMezzo, 90);
 					pianoteqPlayer.setControl(\hammerNoise, 75);
-					pianoteqPlayer.aleaTransposition = nil;
 				}, // indefinido
 				\mediumHigh -> {
 					// como en high pero menos extremo.
