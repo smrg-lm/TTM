@@ -101,6 +101,11 @@ T2M {
 		this.apertium.detectLanguage(string, { arg str;
 			var max = -1, lang, analizeMorph;
 
+			// se requieren los paquetes de los lenguajes a detectar
+			// apertium-eng apertium-spa, usa el detector nativo, no cld2
+			// aunque la interfaz no debería cambiar
+			//"*** LANG: ".post; str.postln;
+
 			if(str.contains(error), { str.postln; action.value; }, {
 				// calc lang
 				str = str.parseYAML;
