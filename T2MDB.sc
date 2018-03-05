@@ -147,6 +147,7 @@ Tweets : T2MDB {
 					existingIDs.includes(i.at(0))
 				});
 				if(append.isEmpty, {
+					"%: No new tweets".format(this).inform;
 					action.value(nil)
 				}, {
 					append = append.collect({ arg i; i[3] = i[3].replace($\n, " "); i });

@@ -140,12 +140,6 @@ PianoteqPlayer {
 				var numSteps = time;
 				var step = diff / numSteps;
 
-				key.postln;
-				diff.postln;
-				step.postln;
-				pianoteqCmd[key].val.postln;
-				pianoteqCmd[key].default.postln;
-
 				if(diff != 0, {
 					numSteps.do({
 						this.setControl(key, pianoteqCmd[key].val - step);

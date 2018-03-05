@@ -6,7 +6,7 @@ TwitterTaste {
 	var punct;
 
 	*new { arg path, tastePlayer;
-		^super.new.init(tastePlayer);
+		^super.new.init(path, tastePlayer);
 	}
 
 	init { arg path, tp;
@@ -109,7 +109,7 @@ TwitterTaste {
 			catValue = arr[catIndex+1]; // dry, off-dry, medium-dry, medium-sweet, sweet, luscious
 			if(catValue.contains("-"), {
 				var words = catValue.split($-);
-				catValue = words[0] ++ (words[0].toUpper ++ words[1..]);
+				catValue = words[0] ++ (words[1][0].toUpper ++ words[1][1..]);
 			});
 			tastePlayer.setPalate("sweetness", catValue);
 		});
@@ -162,12 +162,12 @@ TwitterTaste {
 			catValue = catValue.replace("+", "High");
 
 			catValue1 = arr[catIndex+2]; // nature: coarse, fine-grained
-			if(catValue.contains("-"), {
+			if(catValue1.contains("-"), {
 				var words = catValue1.split($-);
-				catValue1 = words[0] ++ (words[0].toUpper ++ words[1..]);
+				catValue1 = words[0] ++ (words[1][0].toUpper ++ words[1][1..]);
 			});
 
-			tastePlayer.setTannins("sweetness", catValue);
+			tastePlayer.setTannins(catValue, catValue1);
 		});
 	}
 }

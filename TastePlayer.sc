@@ -251,7 +251,7 @@ TastePlayer {
 					pianoteqPlayer.aleaTransposition = pianoteqPlayer.aleaTransposition ++ [60, 72, 84];
 				}
 			],
-			\sournes -> IdentityDictionary[
+			\sourness -> IdentityDictionary[
 				\low -> {
 					// indefinido (ignorar la palabra low cuando está asociada a sourness).
 					pianoteqPlayer.setControl(\octaveStretching, 42);
@@ -405,6 +405,7 @@ TastePlayer {
 		- deep
 		*/
 		intensity[degree.asSymbol].value;
+		"setIntencity | degree: %".format(degree).debug;
 	}
 
 	setColor { arg color, tone;
@@ -427,6 +428,7 @@ TastePlayer {
 		- brown
 		*/
 		wineColor[color.asSymbol][tone.asSymbol].value;
+		"setColor | color: %, tone: %".format(color, tone).debug;
 	}
 
 	setNose { arg intensity;
@@ -439,6 +441,7 @@ TastePlayer {
 		- pronounced
 		*/
 		nose[intensity.asSymbol].value;
+		"setNose | intensity: %".format(intensity).debug;
 	}
 
 	setPalate { arg feature, value;
@@ -481,13 +484,16 @@ TastePlayer {
 		- no lo puso, debe ser short, medium long?
 		*/
 		palate[feature.asSymbol][value.asSymbol].value;
+		"setPalate: feature: %, value: %".format(feature, value).debug;
 	}
 
-	setTannins { arg quality, value; // es sub categoría de palate pero tiene un campo más
+	setTannins { arg level, nature; // es sub categoría de palate pero tiene un campo más
 		/*
 		level: low, medium(-), medium, (ignora medium(+), high)
 		nature: coarse vs fine-grained (o, ignora ripe/soft vs unripe/green/stalky)
 		*/
-		tannins[quality.asSymbol][value.asSymbol].value;
+		tannins[\level][level.asSymbol].value;
+		tannins[\nature][nature.asSymbol].value;
+		"setTannins | level: %, nature: %".format(level, nature).debug;
 	}
 }
