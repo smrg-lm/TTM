@@ -1,31 +1,234 @@
 // los valores bastante son aproximados
-// dependiendo de la amplitud parece que todo tiene a lo brillante
+// dependiendo de la amplitud parece que todo tiende a lo brillante
 
 TastePlayer {
+	var punct;
+
+	var <>pianoteqPlayer;
+	var <twitterTaste;
+
+	var tweetsList;
+	var routine;
+
+	var <view;
+	var <viewLabel;
+
 	var <intensity;
 	var <wineColor;
 	var <nose;
 	var <palate;
 	var <tannins;
 
-	var <pianoteqPlayer;
-
-	*new { arg player;
-		^super.new.init(player);
+	*new { arg pianoteqPlayer, twitterTaste;
+		^super.new.init(pianoteqPlayer, twitterTaste);
 	}
 
-	init { arg player;
-		pianoteqPlayer = player;
+	init { arg pp, tt;
+		pianoteqPlayer = pp;
+		twitterTaste = tt;
+		this.initView;
 		this.initDictionaries();
+
+		punct = [ // very basic, because unicode lack, from T2M
+			".", ",", ";", ":", "'", "`", "\"",
+			"(", ")", "[", "]", "<", ">", "{", "}",
+			"!", "¡", "?", "¿", "\\", "/", "|",
+			"*", "#", "@", "$", // "-", "+", se usan
+			"\n", "\t", "\f", "http", "https" // ...
+		];
 	}
 
-	resetTaste {
-		pianoteqPlayer.setControl(\reloadCurrentPreset, 127);
+	enqueueTweet { arg arr;
+		tweetsList = tweetsList.add(arr);
 	}
 
-	resetTransition { arg time;
-		pianoteqPlayer.resetToPreset(time);
+	play {
+		//view.front;
+		if(routine.notNil, { ^this });
+		routine = this.buildRoutine;
+		routine.play;
 	}
+
+	stop {
+		routine.stop;
+		routine = nil;
+	}
+
+	buildRoutine {
+		^Routine({
+			loop {
+				defer {
+					viewLabel.string = twitterTaste.tag; // can change
+					view.refresh;
+				};
+
+				tweetsList.do({ arg tweet, index;
+					this.resetTaste; // just in case the song changed with bad timing
+					defer {
+						viewLabel.string = "% | %".format(tweet[2], tweet[3]);
+						view.refresh;
+					};
+					9.wait;
+
+					this.processWords(this.extractWords(tweet.last));
+					15.wait;
+
+					this.resetTransition(5);
+					5.wait;
+
+					tweetsList.removeAt(index); // así lo hice en WordPlayer y funciona,
+					                            // pero no me acuerdo por qué funciona.
+					defer {
+						viewLabel.string = twitterTaste.tag;
+						view.refresh;
+					};
+					1.wait;
+				});
+				2.wait;
+			}
+		});
+	}
+
+	// *** visual ***
+
+	initView {
+		viewLabel = StaticText();
+		viewLabel.font = Font("DejaVu Sans Mono", 44); // FIX: CAMBIAR FONT
+		viewLabel.stringColor = Color.white;
+		viewLabel.background = Color.black;
+		viewLabel.align = \center;
+
+		view = View();
+		view.name = "T2Piano: fullscreen para mostrar los tweets";
+		view.layout = VLayout(viewLabel);
+		view.layout.margins = 0!4;
+		view.layout.spacing = 0;
+		view.bounds = Rect(0, 0, 800, 600);
+	}
+
+	// *** text ***
+
+	// from T2M
+	extractWords { arg string;
+		var blanks;
+
+		// filter all punct...
+		punct.do({ arg i; string = string.replace(i, " "); });
+		blanks = string.findRegexp(" {2,}");
+		blanks.do({ arg i; string = string.replace(i[1], " ") });
+		string = string.toLower;
+
+		^string.split($ );
+	}
+
+	processWords { arg arr;
+		var catIndex, catValue;
+
+		// intensity
+		catIndex = arr.find(["intensity"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // pale, medium, deep
+			this.setIntensity(catValue); // does nothing if nil
+		});
+
+		// color - no se pone la palabra color (o no importa, la ignora)
+		catIndex = arr.find(["white"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // lemon-green, lemon, gold, amber, brown
+			if(catValue.contains("-"), { catValue = catValue.split($-)[1] }); // lemon-green is green
+			this.setColor("white", catValue);
+		});
+
+		catIndex = arr.find(["rose"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // pink, salmon, orange, onion
+			this.setColor("rose", catValue);
+		});
+
+		catIndex = arr.find(["red"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // purple, ruby, garnet, twany, brown
+			this.setColor("red", catValue);
+		});
+
+		// nose
+		catIndex = arr.find(["nose"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // light, medium-, medium, medium+, pronounced
+			catValue = catValue.replace("-", "Light");
+			catValue = catValue.replace("+", "Pronounced");
+			this.setNose(catValue);
+		});
+
+		// palate - no se pone la palabra palate
+		catIndex = arr.find(["sweetness"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // dry, off-dry, medium-dry, medium-sweet, sweet, luscious
+			if(catValue.contains("-"), {
+				var words = catValue.split($-);
+				catValue = words[0] ++ (words[1][0].toUpper ++ words[1][1..]);
+			});
+			this.setPalate("sweetness", catValue);
+		});
+
+		catIndex = arr.find(["sourness"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // low, medium-, medium, medium+, high
+			catValue = catValue.replace("-", "Low");
+			catValue = catValue.replace("+", "High");
+			this.setPalate("sourness", catValue);
+		});
+
+		catIndex = arr.find(["body"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // light, medium-, medium, medium+, full
+			catValue = catValue.replace("-", "Light");
+			catValue = catValue.replace("+", "Full");
+			this.setPalate("body", catValue);
+		});
+
+		catIndex = arr.find(["flavor"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // light, medium-, medium, medium+, pronounced
+			catValue = catValue.replace("-", "Light");
+			catValue = catValue.replace("+", "Pronounced");
+			this.setPalate("flavor", catValue);
+		});
+
+		catIndex = arr.find(["texture"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // steely, olly, creamy
+			this.setPalate("texture", catValue);
+		});
+
+		catIndex = arr.find(["finish"]);
+		if(catIndex.notNil, {
+			catValue = arr[catIndex+1]; // // short, medium- medium medium+ long
+			catValue = catValue.replace("-", "Short");
+			catValue = catValue.replace("+", "Long");
+			this.setPalate("finish", catValue);
+		});
+
+		// tannins
+		catIndex = arr.find(["tannins"]);
+		if(catIndex.notNil, {
+			var catValue1;
+
+			catValue = arr[catIndex+1]; // level: low, medium-, medium, medium+, high
+			catValue = catValue.replace("-", "Low");
+			catValue = catValue.replace("+", "High");
+
+			catValue1 = arr[catIndex+2]; // nature: coarse, fine-grained
+			if(catValue1.contains("-"), {
+				var words = catValue1.split($-);
+				catValue1 = words[0] ++ (words[1][0].toUpper ++ words[1][1..]);
+			});
+
+			this.setTannins(catValue, catValue1);
+		});
+	}
+
+	// *** mapping ***
 
 	initDictionaries {
 		intensity = IdentityDictionary[
@@ -495,5 +698,13 @@ TastePlayer {
 		tannins[\level][level.asSymbol].value;
 		tannins[\nature][nature.asSymbol].value;
 		"setTannins | level: %, nature: %".format(level, nature).debug;
+	}
+
+	resetTaste {
+		pianoteqPlayer.setControl(\reloadCurrentPreset, 127);
+	}
+
+	resetTransition { arg time;
+		pianoteqPlayer.resetToPreset(time);
 	}
 }
