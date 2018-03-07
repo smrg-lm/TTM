@@ -62,22 +62,28 @@ TastePlayer {
 					view.refresh;
 				};
 
+				// agregar los tiempos de espera como variables de instancia
+				// para hacer compatibles las duraciones de las texturas como archivos
 				tweetsList.do({ arg tweet, index;
 					this.resetTaste; // just in case the song changed with bad timing
 					defer {
 						viewLabel.string = "% | %".format(tweet[2], tweet[3]);
 						view.refresh;
 					};
-					9.wait;
+					2.wait;
 
 					this.processWords(this.extractWords(tweet.last));
-					15.wait;
+					20.wait;
 
-					this.resetTransition(5);
-					5.wait;
+					this.resetTransition(7);
+					7.wait;
 
 					tweetsList.removeAt(index); // así lo hice en WordPlayer y funciona,
 					                            // pero no me acuerdo por qué funciona.
+					                            // No, no funciona, el índice se incrementa
+					                            // y la cantidad de elementos disminuye
+					                            // saltea elementos, no se rompe porque do
+					                            // debe checkear size a cada vuelta o similar
 					defer {
 						viewLabel.string = twitterTaste.tag;
 						view.refresh;
@@ -702,6 +708,7 @@ TastePlayer {
 
 	resetTaste {
 		pianoteqPlayer.setControl(\reloadCurrentPreset, 127);
+		pianoteqPlayer.aleaTransposition = nil;
 	}
 
 	resetTransition { arg time;

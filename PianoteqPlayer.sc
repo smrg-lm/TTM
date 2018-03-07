@@ -129,6 +129,8 @@ PianoteqPlayer {
 	resetToPreset { arg time;
 		if(time.isNil || time.round.asInteger <= 0, {
 			this.setControl(\reloadCurrentPreset, 127);
+			this.aleaTransposition = nil;
+			this.tempo = 1;
 			^this;
 		});
 
@@ -152,6 +154,7 @@ PianoteqPlayer {
 		// safe, pero no se pueden hacer cambios antes de tiempo, idem antes
 		SystemClock.sched(time, {
 			this.setControl(\reloadCurrentPreset, 127);
+			this.aleaTransposition = nil;
 			this.tempo = 1;
 		});
 	}
