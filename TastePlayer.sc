@@ -19,6 +19,12 @@ TastePlayer {
 	var <palate;
 	var <tannins;
 
+	var <>texturesPath; // "~/Desktop/Barcelona/Textures".standardizePath;
+	var <>texturesAmp = 0.125;
+	var playTanninsTexture = false;
+	var <>transformDur = 20;
+	var <>resetTransformDur = 7;
+
 	*new { arg pianoteqPlayer, twitterTaste;
 		^super.new.init(pianoteqPlayer, twitterTaste);
 	}
@@ -36,6 +42,10 @@ TastePlayer {
 			"*", "#", "@", "$", // "-", "+", se usan
 			"\n", "\t", "\f", "http", "https" // ...
 		];
+
+		Server.default.waitForBoot({
+			TastePlayer.buildDefs;
+		});
 	}
 
 	enqueueTweet { arg arr;
@@ -73,10 +83,10 @@ TastePlayer {
 					2.wait;
 
 					this.processWords(this.extractWords(tweet.last));
-					20.wait;
+					transformDur.wait;
 
 					this.resetTransition(7);
-					7.wait;
+					resetTransformDur.wait;
 
 					tweetsList.removeAt(index); // así lo hice en WordPlayer y funciona,
 					                            // pero no me acuerdo por qué funciona.
@@ -547,9 +557,15 @@ TastePlayer {
 			\texture -> IdentityDictionary[
 				// Agregar alguna textura sonora (tengo ejemplos de oily y creamy,
 				// habría que conseguirse una lista más completa)
-				\steely -> {},
-				\olly -> {},
-				\creamy -> {}
+				\steely -> {
+					this.readAndPlayTexture("steely", texturesAmp);
+				},
+				\olly -> {
+					this.readAndPlayTexture("olly", texturesAmp);
+				},
+				\creamy -> {
+					this.readAndPlayTexture("creamy", texturesAmp);
+				}
 			],
 			\finish -> IdentityDictionary[
 				// Esto es cuanto dura el sabor en boca, luego puede
@@ -583,25 +599,29 @@ TastePlayer {
 		*/
 		tannins = IdentityDictionary[
 			\level -> IdentityDictionary[
-				\low -> {},
-				\mediumLow -> {},
-				\medium -> {},
+				\low -> { playTanninsTexture = false },
+				\mediumLow -> { playTanninsTexture = false },
+				\medium -> { playTanninsTexture = false },
 				\mediumHigh -> {
+					playTanninsTexture = true;
 					pianoteqPlayer.setControl(\dampingDuration, 0);
 					pianoteqPlayer.aleaTransposition = pianoteqPlayer.aleaTransposition ++ [36, 48];
 				},
 				\high -> {
+					playTanninsTexture = true;
 					pianoteqPlayer.aleaTransposition = pianoteqPlayer.aleaTransposition ++ [36, 37, 48];
 					pianoteqPlayer.setControl(\dampingDuration, 0);
 				}
 			],
-			\nature -> IdentityDictionary[ // se activa solo si los taninos son mediumHigh+
+			\nature -> IdentityDictionary[
 				\coarse -> {
 					// archivo con textura, es condicional a si los taninos son meidium+ y high
-				}, // vs fine-grained
+					if(playTanninsTexture, { this.readAndPlayTexture("coarse", texturesAmp) });
+				},
 				\fineGrained -> {
 					// archivo con textura, es condicional a si los taninos son meidium+ y high
-				}, // vs coarse
+					if(playTanninsTexture, { this.readAndPlayTexture("finegrained", texturesAmp) });
+				},
 			]
 		];
 	}
@@ -701,7 +721,7 @@ TastePlayer {
 		level: low, medium(-), medium, (ignora medium(+), high)
 		nature: coarse vs fine-grained (o, ignora ripe/soft vs unripe/green/stalky)
 		*/
-		tannins[\level][level.asSymbol].value;
+		tannins[\level][level.asSymbol].value; // order matters, sets playTanninsTexture for nature
 		tannins[\nature][nature.asSymbol].value;
 		"setTannins | level: %, nature: %".format(level, nature).debug;
 	}
@@ -713,5 +733,66 @@ TastePlayer {
 
 	resetTransition { arg time;
 		pianoteqPlayer.resetToPreset(time);
+	}
+
+	// from WordSound
+	*buildDefs {
+		[1, 2].do({ arg n;
+			SynthDef("textureSynth" ++ n, {
+				arg out, buf, amp = 0.2, gate = 1,
+				fadeIn = 0.02, fadeOut = 0.02;
+
+				var src, src2, env, snd;
+
+				src = 4.collect({
+					PlayBuf.ar(
+						n, buf, BufRateScale.kr(buf),
+						startPos: Rand(0, BufFrames.kr(buf)), loop: 1
+					) * 0.25;
+				});
+				if(n == 2, { src2 = src.sum * 0.5 }, { src2 = src });
+
+				src2 = GrainIn.ar(
+					2, Dust.kr(LFNoise1.kr(0.5).range(2, 20)),
+					LFNoise2.kr(0.5).range(0.01, 1),
+					src2, LFNoise2.kr(1), mul: 0.1
+				);
+
+				env = EnvGen.kr(Env.asr(fadeIn, 1, fadeOut), gate, doneAction: 2);
+				snd = src + src2 * env * amp;
+
+				Out.ar(out, snd);
+			}).add;
+		});
+	}
+
+	// hack
+	readAndPlayTexture { arg folderName, amp = 0.2;
+		var filePath;
+
+		if(texturesPath.isNil, { "Falta setear el path de las exturas correctamente!".warn });
+		filePath = PathName(texturesPath +/+ folderName).files.choose;
+		if(filePath.isNil, { ^this }, { filePath = filePath.fullPath });
+
+		Buffer.read(
+			Server.default, // hard
+			filePath,
+			action: { arg b;
+				var defName = "textureSynth" ++ b.numChannels;
+				b.normalize;
+				fork {
+					var synth;
+					Server.default.sync; // hard
+					synth = Synth(defName, [
+						out: 0, buf: b, amp: amp,
+						fadeOut: resetTransformDur
+					]);
+					transformDur.wait;
+					synth.release;
+					resetTransformDur.wait;
+					b.free;
+				}
+			}
+		);
 	}
 }
