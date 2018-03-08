@@ -109,7 +109,7 @@ TastePlayer {
 
 	initView {
 		viewLabel = StaticText();
-		viewLabel.font = Font("DejaVu Sans Mono", 44); // FIX: CAMBIAR FONT
+		//viewLabel.font = Font("DejaVu Sans Mono", 44); // FIX: CAMBIAR FONT
 		viewLabel.stringColor = Color.white;
 		viewLabel.background = Color.black;
 		viewLabel.align = \center;
@@ -120,6 +120,10 @@ TastePlayer {
 		view.layout.margins = 0!4;
 		view.layout.spacing = 0;
 		view.bounds = Rect(0, 0, 800, 600);
+	}
+
+	setViewFont { arg font;
+		viewLabel.font = font;
 	}
 
 	// *** text ***
