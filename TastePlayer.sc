@@ -135,7 +135,9 @@ TastePlayer {
 		catIndex = arr.find(["white"]);
 		if(catIndex.notNil, {
 			catValue = arr[catIndex+1]; // lemon-green, lemon, gold, amber, brown
-			if(catValue.contains("-"), { catValue = catValue.split($-)[1] }); // lemon-green is green
+			if(catValue.notNil && { catValue.contains("-") }, {
+				catValue = catValue.split($-)[1] // lemon-green is green
+			});
 			this.setColor("white", catValue);
 		});
 
@@ -155,8 +157,10 @@ TastePlayer {
 		catIndex = arr.find(["nose"]);
 		if(catIndex.notNil, {
 			catValue = arr[catIndex+1]; // light, medium-, medium, medium+, pronounced
-			catValue = catValue.replace("-", "Light");
-			catValue = catValue.replace("+", "Pronounced");
+			if(catValue.notNil, {
+				catValue = catValue.replace("-", "Light");
+				catValue = catValue.replace("+", "Pronounced");
+			});
 			this.setNose(catValue);
 		});
 
@@ -164,7 +168,7 @@ TastePlayer {
 		catIndex = arr.find(["sweetness"]);
 		if(catIndex.notNil, {
 			catValue = arr[catIndex+1]; // dry, off-dry, medium-dry, medium-sweet, sweet, luscious
-			if(catValue.contains("-"), {
+			if(catValue.notNil && { catValue.contains("-") }, {
 				var words = catValue.split($-);
 				catValue = words[0] ++ (words[1][0].toUpper ++ words[1][1..]);
 			});
@@ -174,24 +178,30 @@ TastePlayer {
 		catIndex = arr.find(["sourness"]);
 		if(catIndex.notNil, {
 			catValue = arr[catIndex+1]; // low, medium-, medium, medium+, high
-			catValue = catValue.replace("-", "Low");
-			catValue = catValue.replace("+", "High");
+			if(catValue.notNil, {
+				catValue = catValue.replace("-", "Low");
+				catValue = catValue.replace("+", "High");
+			});
 			this.setPalate("sourness", catValue);
 		});
 
 		catIndex = arr.find(["body"]);
 		if(catIndex.notNil, {
 			catValue = arr[catIndex+1]; // light, medium-, medium, medium+, full
-			catValue = catValue.replace("-", "Light");
-			catValue = catValue.replace("+", "Full");
+			if(catValue.notNil, {
+				catValue = catValue.replace("-", "Light");
+				catValue = catValue.replace("+", "Full");
+			});
 			this.setPalate("body", catValue);
 		});
 
 		catIndex = arr.find(["flavor"]);
 		if(catIndex.notNil, {
 			catValue = arr[catIndex+1]; // light, medium-, medium, medium+, pronounced
-			catValue = catValue.replace("-", "Light");
-			catValue = catValue.replace("+", "Pronounced");
+			if(catValue.notNil, {
+				catValue = catValue.replace("-", "Light");
+				catValue = catValue.replace("+", "Pronounced");
+			});
 			this.setPalate("flavor", catValue);
 		});
 
@@ -204,8 +214,10 @@ TastePlayer {
 		catIndex = arr.find(["finish"]);
 		if(catIndex.notNil, {
 			catValue = arr[catIndex+1]; // // short, medium- medium medium+ long
-			catValue = catValue.replace("-", "Short");
-			catValue = catValue.replace("+", "Long");
+			if(catValue.notNil, {
+				catValue = catValue.replace("-", "Short");
+				catValue = catValue.replace("+", "Long");
+			});
 			this.setPalate("finish", catValue);
 		});
 
@@ -215,11 +227,13 @@ TastePlayer {
 			var catValue1;
 
 			catValue = arr[catIndex+1]; // level: low, medium-, medium, medium+, high
-			catValue = catValue.replace("-", "Low");
-			catValue = catValue.replace("+", "High");
+			if(catValue.notNil, {
+				catValue = catValue.replace("-", "Low");
+				catValue = catValue.replace("+", "High");
+			});
 
 			catValue1 = arr[catIndex+2]; // nature: coarse, fine-grained
-			if(catValue1.contains("-"), {
+			if(catValue1.notNil && { catValue1.contains("-") }, {
 				var words = catValue1.split($-);
 				catValue1 = words[0] ++ (words[1][0].toUpper ++ words[1][1..]);
 			});
