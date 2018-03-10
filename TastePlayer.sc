@@ -67,13 +67,17 @@ TastePlayer {
 	buildRoutine {
 		^Routine({
 			loop {
+				//var list;
+
 				defer {
 					viewLabel.string = twitterTaste.tag; // can change
 					view.refresh;
 				};
 
-				// agregar los tiempos de espera como variables de instancia
-				// para hacer compatibles las duraciones de las texturas como archivos
+				//list = tweetsList; // la referencia no funciona
+				//tweetsList = nil;
+
+				//list.do({ arg tweet, index;
 				tweetsList.do({ arg tweet, index;
 					this.resetTaste; // just in case the song changed with bad timing
 					defer {
@@ -88,12 +92,8 @@ TastePlayer {
 					this.resetTransition(7);
 					resetTransformDur.wait;
 
-					tweetsList.removeAt(index); // así lo hice en WordPlayer y funciona,
-					                            // pero no me acuerdo por qué funciona.
-					                            // No, no funciona, el índice se incrementa
-					                            // y la cantidad de elementos disminuye
-					                            // saltea elementos, no se rompe porque do
-					                            // debe checkear size a cada vuelta o similar
+					tweetsList.removeAt(index); // esto funciona pero "está mal", y no encuentro una solución
+
 					defer {
 						viewLabel.string = twitterTaste.tag;
 						view.refresh;
