@@ -169,7 +169,7 @@ TastePlayer {
 
 		catIndex = arr.find(["red"]);
 		if(catIndex.notNil, {
-			catValue = arr[catIndex+1]; // purple, ruby, garnet, twany, brown
+			catValue = arr[catIndex+1]; // purple, ruby, garnet, tawny, brown
 			this.setColor("red", catValue);
 		});
 
@@ -227,7 +227,7 @@ TastePlayer {
 
 		catIndex = arr.find(["texture"]);
 		if(catIndex.notNil, {
-			catValue = arr[catIndex+1]; // steely, olly, creamy
+			catValue = arr[catIndex+1]; // steely, oily, creamy
 			this.setPalate("texture", catValue);
 		});
 
@@ -376,7 +376,7 @@ TastePlayer {
 					// más pesados y lentos, quizás más apasionados, tendiendo al brown
 					pianoteqPlayer.tempo = 0.5;
 				},
-				\twany -> {
+				\tawny -> {
 					// igual garnet...
 					pianoteqPlayer.tempo = 0.45;
 				},
@@ -578,8 +578,8 @@ TastePlayer {
 				\steely -> {
 					this.readAndPlayTexture("steely", texturesAmp);
 				},
-				\olly -> {
-					this.readAndPlayTexture("olly", texturesAmp);
+				\oily -> {
+					this.readAndPlayTexture("oily", texturesAmp);
 				},
 				\creamy -> {
 					this.readAndPlayTexture("creamy", texturesAmp);
@@ -671,7 +671,7 @@ TastePlayer {
 		red:
 		- purple
 		- ruby
-		- garnet y twany
+		- garnet y tawny
 		- brown
 		*/
 		wineColor[color.asSymbol][tone.asSymbol].value;
@@ -724,7 +724,7 @@ TastePlayer {
 
 		texture:
 		- steely
-		- olly
+		- oily
 		- creamy
 
 		finish:
